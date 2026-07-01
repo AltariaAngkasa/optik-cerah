@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daftar — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<div class="auth-shell">
+  <div class="sky-orb" style="width:300px;height:300px;top:8%;right:5%;"></div>
+  <div class="sky-orb orb-ring" style="width:160px;height:160px;bottom:6%;left:8%;"></div>
+  <div class="auth-card">
+    <div class="panel">
+      <span class="brand-mark" style="margin-bottom:16px;display:block;" id="authBrandMark"></span>
+      <h2>Buat Akun Baru</h2>
+      <p style="margin-bottom:24px;">Daftar untuk mulai belanja kacamata dan aksesoris favoritmu.</p>
+
+      <div class="alert alert-error" id="errorAlert"></div>
+
+      <form id="signupForm">
+        <div class="form-group">
+          <label for="name">Nama Lengkap</label>
+          <input type="text" id="name" required placeholder="Nama kamu">
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required placeholder="nama@email.com">
+        </div>
+        <div class="form-group">
+          <label for="phone">Nomor HP</label>
+          <input type="tel" id="phone" placeholder="08xxxxxxxxxx">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required placeholder="Minimal 6 karakter">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Daftar</button>
+      </form>
+
+      <p style="text-align:center;margin-top:20px;font-size:0.9rem;">
+        Sudah punya akun? <a href="login.html" style="color:var(--sky-600);font-weight:700;">Masuk</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="js/main.js"></script>
+<script>
+document.getElementById('authBrandMark').innerHTML = brandMarkSvg();
+renderNavbar();
+
+const form = document.getElementById('signupForm');
+const errorAlert = document.getElementById('errorAlert');
+const submitBtn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorAlert.classList.remove('show');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Memproses...';
+  try {
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const password = document.getElementById('password').value;
+    const data = await apiCall('/auth/signup', { method: 'POST', body: { name, email, phone, password } });
+    toast(`Akun berhasil dibuat. Selamat datang, ${data.user.name}!`, 'success');
+    setTimeout(() => window.location.href = 'index.html', 500);
+  } catch (err) {
+    errorAlert.textContent = err.message;
+    errorAlert.classList.add('show');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Daftar';
+  }
+});
+</script>
+</body>
+</html>

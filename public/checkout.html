@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="section">
+  <div class="container">
+    <div class="steps reveal in">
+      <div class="step-dot done">1</div><div class="step-line"></div>
+      <div class="step-dot active">2</div><div class="step-line"></div>
+      <div class="step-dot">3</div>
+    </div>
+    <h1 class="reveal in" style="text-align:center;margin-bottom:34px;">Checkout</h1>
+
+    <div class="grid-2" style="align-items:start;">
+      <div class="panel reveal in">
+        <h3>Alamat Pengiriman</h3>
+        <div class="alert alert-error" id="errorAlert"></div>
+        <form id="checkoutForm">
+          <div class="form-group">
+            <label for="recipient_name">Nama Penerima</label>
+            <input type="text" id="recipient_name" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="phone">Nomor HP</label>
+              <input type="tel" id="phone" required>
+            </div>
+            <div class="form-group">
+              <label for="city">Kota Tujuan</label>
+              <select id="city" required></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="address">Alamat Lengkap</label>
+            <textarea id="address" rows="3" required placeholder="Nama jalan, nomor rumah, kelurahan, kecamatan"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="postal_code">Kode Pos (opsional)</label>
+            <input type="text" id="postal_code">
+          </div>
+          <div class="form-group">
+            <label for="promo_code">Kode Promo (opsional)</label>
+            <div class="flex gap-8">
+              <input type="text" id="promo_code" placeholder="Contoh: OPTIK10" style="text-transform:uppercase;">
+              <button type="button" class="btn btn-secondary btn-sm" id="applyPromoBtn">Terapkan</button>
+            </div>
+            <span class="helper-text" id="promoMsg"></span>
+          </div>
+          <div class="form-group">
+            <label>Metode Pembayaran</label>
+            <div class="pay-method-grid" id="paymentMethods">
+              <button type="button" class="pay-method selected" data-method="qris">QRIS</button>
+              <button type="button" class="pay-method" data-method="va">Virtual Account</button>
+              <button type="button" class="pay-method" data-method="kredit_debit">Kredit/Debit</button>
+              <button type="button" class="pay-method" data-method="transfer">Transfer Bank</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Buat Pesanan &amp; Bayar</button>
+        </form>
+      </div>
+
+      <div class="panel reveal in">
+        <h3>Ringkasan Pesanan</h3>
+        <div id="orderItemsSummary"></div>
+        <div class="summary-row"><span>Subtotal</span><span id="sumSubtotal">Rp0</span></div>
+        <div class="summary-row"><span>Ongkos Kirim</span><span id="sumShipping">Rp0</span></div>
+        <div class="summary-row" id="discountRow" style="display:none;"><span>Diskon</span><span id="sumDiscount">-Rp0</span></div>
+        <div class="summary-row total"><span>Total</span><span id="sumTotal">Rp0</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="js/main.js"></script>
+<script>
+let appliedPromo = null;
+let selectedMethod = 'qris';
+let shippingCities = [];
+
+async function init() {
+  const user = await requireLoginOrRedirect('checkout.html');
+  if (!user) return;
+
+  const cart = getCart();
+  if (cart.length === 0) {
+    toast('Keranjang kosong, tidak bisa checkout.', 'error');
+    setTimeout(() => window.location.href = 'cart.html', 800);
+    return;
+  }
+
+  renderItemsSummary(cart);
+
+  const data = await apiCall('/shipping/cities');
+  shippingCities = data.cities;
+  const citySelect = document.getElementById('city');
+  citySelect.innerHTML = shippingCities.map(c => `<option value="${c.city}">${c.city} — ${formatRupiah(c.cost)}</option>`).join('');
+  updateSummary();
+}
+
+function renderItemsSummary(cart) {
+  document.getElementById('orderItemsSummary').innerHTML = cart.map(it => `
+    <div class="summary-row"><span>${it.name} × ${it.quantity}</span><span>${formatRupiah(it.price * it.quantity)}</span></div>
+  `).join('');
+}
+
+function subtotalOf(cart) { return cart.reduce((s, it) => s + it.price * it.quantity, 0); }
+
+function updateSummary() {
+  const cart = getCart();
+  const subtotal = subtotalOf(cart);
+  const city = document.getElementById('city').value;
+  const cityEntry = shippingCities.find(c => c.city === city);
+  const shipping = cityEntry ? cityEntry.cost : 0;
+
+  let discount = 0;
+  if (appliedPromo) {
+    discount = appliedPromo.discount_type === 'percent' ? subtotal * (appliedPromo.discount_value / 100) : appliedPromo.discount_value;
+  }
+  const total = Math.max(0, subtotal + shipping - discount);
+
+  document.getElementById('sumSubtotal').textContent = formatRupiah(subtotal);
+  document.getElementById('sumShipping').textContent = formatRupiah(shipping);
+  document.getElementById('sumTotal').textContent = formatRupiah(total);
+  const discRow = document.getElementById('discountRow');
+  if (discount > 0) {
+    discRow.style.display = 'flex';
+    document.getElementById('sumDiscount').textContent = '-' + formatRupiah(discount);
+  } else {
+    discRow.style.display = 'none';
+  }
+}
+
+document.getElementById('city').addEventListener?.('change', updateSummary);
+document.addEventListener('change', (e) => { if (e.target.id === 'city') updateSummary(); });
+
+document.getElementById('applyPromoBtn').addEventListener('click', async () => {
+  const code = document.getElementById('promo_code').value.trim();
+  const msg = document.getElementById('promoMsg');
+  if (!code) return;
+  try {
+    const data = await apiCall('/promo/check', { method: 'POST', body: { code } });
+    appliedPromo = data.promo;
+    msg.style.color = 'var(--mint)';
+    msg.textContent = `Kode promo diterapkan: ${appliedPromo.code}`;
+    updateSummary();
+  } catch (err) {
+    appliedPromo = null;
+    msg.style.color = 'var(--rose)';
+    msg.textContent = err.message;
+    updateSummary();
+  }
+});
+
+document.querySelectorAll('.pay-method').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pay-method').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedMethod = btn.dataset.method;
+  });
+});
+
+document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorAlert = document.getElementById('errorAlert');
+  errorAlert.classList.remove('show');
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Memproses...';
+
+  try {
+    const cart = getCart();
+    const payload = {
+      items: cart.map(it => ({ product_id: it.product_id, quantity: it.quantity })),
+      recipient_name: document.getElementById('recipient_name').value.trim(),
+      phone: document.getElementById('phone').value.trim(),
+      address: document.getElementById('address').value.trim(),
+      city: document.getElementById('city').value,
+      postal_code: document.getElementById('postal_code').value.trim(),
+      promo_code: appliedPromo ? appliedPromo.code : null,
+      payment_method: selectedMethod
+    };
+    const data = await apiCall('/orders', { method: 'POST', body: payload });
+    clearCart();
+    toast('Pesanan berhasil dibuat! Lanjut ke pembayaran.', 'success');
+    setTimeout(() => window.location.href = `payment.html?code=${data.order.order_code}`, 500);
+  } catch (err) {
+    errorAlert.textContent = err.message;
+    errorAlert.classList.add('show');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Buat Pesanan & Bayar';
+  }
+});
+
+renderNavbar();
+init();
+</script>
+</body>
+</html>

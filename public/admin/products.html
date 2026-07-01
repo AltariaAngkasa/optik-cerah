@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produk — Admin OptikCerah</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container flex-between">
+    <div class="brand"><span class="brand-mark" id="brandMark"></span> OptikCerah Admin</div>
+    <div class="flex gap-16">
+      <span id="adminTopbarUser" style="font-weight:600;font-size:0.9rem;color:var(--ink-700);"></span>
+      <button class="btn btn-secondary btn-sm" id="adminLogoutBtn">Keluar</button>
+    </div>
+  </div>
+</nav>
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebarRoot"></aside>
+  <main class="admin-main">
+    <div class="flex-between reveal in">
+      <div>
+        <h1>Produk</h1>
+        <p>Kelola kacamata, aksesoris, dan pendukung yang dijual.</p>
+      </div>
+      <button class="btn btn-primary" id="addProductBtn">+ Tambah Produk</button>
+    </div>
+
+    <div id="productsTable" class="page-loader"><div class="spinner"></div></div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="productModal">
+  <div class="modal-box">
+    <h3 id="modalTitle">Tambah Produk</h3>
+    <div class="alert alert-error" id="modalError"></div>
+    <form id="productForm">
+      <input type="hidden" id="productId">
+      <div class="form-group"><label>Nama Produk</label><input type="text" id="pName" required></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Kategori</label>
+          <select id="pCategory">
+            <option value="kacamata">Kacamata</option>
+            <option value="aksesoris">Aksesoris</option>
+            <option value="pendukung">Pendukung</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Harga (Rp)</label><input type="number" id="pPrice" min="0" required></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Stok</label><input type="number" id="pStock" min="0" required></div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="pActive"><option value="true">Aktif</option><option value="false">Nonaktif</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label>URL Gambar</label><input type="text" id="pImage" placeholder="https://..."></div>
+      <div class="form-group"><label>Deskripsi</label><textarea id="pDesc" rows="3"></textarea></div>
+      <div class="flex gap-12" style="margin-top:10px;">
+        <button type="submit" class="btn btn-primary btn-block" id="saveBtn">Simpan</button>
+        <button type="button" class="btn btn-secondary" id="cancelModalBtn">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+<script>
+document.getElementById('brandMark').innerHTML = brandMarkSvg();
+renderAdminSidebar('products');
+initAdminTopbar();
+
+let products = [];
+
+async function loadProducts() {
+  await requireAdminOrRedirect();
+  const table = document.getElementById('productsTable');
+  table.className = 'page-loader';
+  table.innerHTML = '<div class="spinner"></div>';
+  try {
+    const data = await apiCall('/admin/products');
+    products = data.products;
+    table.className = '';
+    if (products.length === 0) {
+      table.innerHTML = `<div class="empty-state"><p>Belum ada produk. Tambahkan produk pertamamu.</p></div>`;
+      return;
+    }
+    table.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th>Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody>
+        ${products.map(p => `<tr>
+          <td class="flex gap-12"><img src="${p.image_url || 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=100'}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;"> ${p.name}</td>
+          <td style="text-transform:capitalize;">${p.category}</td>
+          <td>${formatRupiah(p.price)}</td>
+          <td>${p.stock}</td>
+          <td>${p.is_active ? '<span class="badge badge-received">Aktif</span>' : '<span class="badge badge-canceled">Nonaktif</span>'}</td>
+          <td class="flex gap-8">
+            <button class="btn btn-secondary btn-sm edit-btn" data-id="${p.id}">Edit</button>
+            <button class="btn btn-danger btn-sm delete-btn" data-id="${p.id}">Hapus</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div></div>`;
+
+    table.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => openModal(Number(btn.dataset.id))));
+    table.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', () => deleteProduct(Number(btn.dataset.id))));
+  } catch (err) {
+    table.innerHTML = `<p>Gagal memuat produk: ${err.message}</p>`;
+  }
+}
+
+const modal = document.getElementById('productModal');
+function openModal(id) {
+  document.getElementById('modalError').classList.remove('show');
+  const form = document.getElementById('productForm');
+  form.reset();
+  if (id) {
+    const p = products.find(x => x.id === id);
+    document.getElementById('modalTitle').textContent = 'Edit Produk';
+    document.getElementById('productId').value = p.id;
+    document.getElementById('pName').value = p.name;
+    document.getElementById('pCategory').value = p.category;
+    document.getElementById('pPrice').value = p.price;
+    document.getElementById('pStock').value = p.stock;
+    document.getElementById('pActive').value = String(p.is_active);
+    document.getElementById('pImage').value = p.image_url || '';
+    document.getElementById('pDesc').value = p.description || '';
+  } else {
+    document.getElementById('modalTitle').textContent = 'Tambah Produk';
+    document.getElementById('productId').value = '';
+    document.getElementById('pActive').value = 'true';
+  }
+  modal.classList.add('show');
+}
+function closeModal() { modal.classList.remove('show'); }
+
+document.getElementById('addProductBtn').addEventListener('click', () => openModal(null));
+document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+document.getElementById('productForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('productId').value;
+  const payload = {
+    name: document.getElementById('pName').value.trim(),
+    category: document.getElementById('pCategory').value,
+    price: Number(document.getElementById('pPrice').value),
+    stock: Number(document.getElementById('pStock').value),
+    image_url: document.getElementById('pImage').value.trim(),
+    description: document.getElementById('pDesc').value.trim(),
+    is_active: document.getElementById('pActive').value === 'true'
+  };
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Menyimpan...';
+  try {
+    if (id) {
+      await apiCall(`/admin/products/${id}`, { method: 'PUT', body: payload });
+    } else {
+      await apiCall('/admin/products', { method: 'POST', body: payload });
+    }
+    toast('Produk berhasil disimpan.', 'success');
+    closeModal();
+    loadProducts();
+  } catch (err) {
+    const errEl = document.getElementById('modalError');
+    errEl.textContent = err.message;
+    errEl.classList.add('show');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Simpan';
+  }
+});
+
+async function deleteProduct(id) {
+  if (!confirm('Yakin ingin menghapus produk ini?')) return;
+  try {
+    await apiCall(`/admin/products/${id}`, { method: 'DELETE' });
+    toast('Produk dihapus.', 'success');
+    loadProducts();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+loadProducts();
+</script>
+</body>
+</html>

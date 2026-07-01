@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pembayaran — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="section">
+  <div class="container">
+    <div class="steps reveal in">
+      <div class="step-dot done">1</div><div class="step-line"></div>
+      <div class="step-dot done">2</div><div class="step-line"></div>
+      <div class="step-dot active">3</div>
+    </div>
+    <div id="paymentContent" style="max-width:640px;margin:0 auto;" class="page-loader"><div class="spinner"></div></div>
+  </div>
+</section>
+
+<script src="js/main.js"></script>
+<script>
+renderNavbar();
+
+const params = new URLSearchParams(location.search);
+const orderCode = params.get('code');
+let countdownInterval;
+let currentOrder = null;
+let selectedMethod = null;
+
+const METHOD_LABEL = { qris: 'QRIS', va: 'Virtual Account', kredit_debit: 'Kredit/Debit', transfer: 'Transfer Bank' };
+
+function methodDetailHtml(method, order) {
+  const vaNumber = '8807' + String(order.id).padStart(8, '0');
+  if (method === 'qris') {
+    return `<div class="panel" style="text-align:center;background:var(--sky-50);">
+      <svg width="150" height="150" viewBox="0 0 100 100" style="margin:0 auto;">
+        <rect width="100" height="100" fill="white"/>
+        <rect x="6" y="6" width="24" height="24" fill="#0b1a2b"/><rect x="70" y="6" width="24" height="24" fill="#0b1a2b"/><rect x="6" y="70" width="24" height="24" fill="#0b1a2b"/>
+        <rect x="12" y="12" width="12" height="12" fill="white"/><rect x="76" y="12" width="12" height="12" fill="white"/><rect x="12" y="76" width="12" height="12" fill="white"/>
+        <rect x="40" y="12" width="6" height="6" fill="#0b1a2b"/><rect x="52" y="20" width="6" height="6" fill="#0b1a2b"/><rect x="40" y="40" width="8" height="8" fill="#0b1a2b"/>
+        <rect x="55" y="45" width="6" height="6" fill="#0b1a2b"/><rect x="65" y="55" width="10" height="10" fill="#0b1a2b"/><rect x="40" y="60" width="6" height="6" fill="#0b1a2b"/>
+        <rect x="80" y="45" width="6" height="16" fill="#0b1a2b"/><rect x="45" y="80" width="16" height="6" fill="#0b1a2b"/><rect x="70" y="80" width="14" height="14" fill="#0b1a2b"/>
+      </svg>
+      <p class="helper-text">Scan QRIS ini menggunakan aplikasi e-wallet atau m-banking kamu (simulasi tugas kuliah).</p>
+    </div>`;
+  }
+  if (method === 'va') {
+    return `<div class="panel" style="background:var(--sky-50);">
+      <p class="helper-text">Nomor Virtual Account</p>
+      <p class="mono" style="font-size:1.4rem;font-weight:700;color:var(--sky-700);">${vaNumber}</p>
+      <p class="helper-text">Bayar melalui ATM/m-banking dengan nomor VA di atas (simulasi tugas kuliah).</p>
+    </div>`;
+  }
+  if (method === 'kredit_debit') {
+    return `<div class="panel" style="background:var(--sky-50);">
+      <div class="form-group"><label>Nomor Kartu</label><input type="text" placeholder="4123 xxxx xxxx xxxx" disabled></div>
+      <div class="form-row">
+        <div class="form-group"><label>Masa Berlaku</label><input type="text" placeholder="MM/YY" disabled></div>
+        <div class="form-group"><label>CVV</label><input type="text" placeholder="•••" disabled></div>
+      </div>
+      <p class="helper-text">Formulir kartu ini simulasi untuk keperluan tugas kuliah — tidak memproses transaksi nyata.</p>
+    </div>`;
+  }
+  return `<div class="panel" style="background:var(--sky-50);">
+    <p class="helper-text">Transfer ke rekening</p>
+    <p class="mono" style="font-size:1.15rem;font-weight:700;color:var(--sky-700);">BCA 8801 234 567 — a.n. OptikCerah</p>
+    <p class="helper-text">Transfer sesuai nominal total pesanan, lalu klik "Saya Sudah Bayar" (simulasi tugas kuliah).</p>
+  </div>`;
+}
+
+function renderExpiredOrDone(order) {
+  const content = document.getElementById('paymentContent');
+  if (order.status === 'expired' || order.status === 'canceled') {
+    content.innerHTML = `<div class="panel reveal in" style="text-align:center;">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--rose)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <h3>Waktu pembayaran habis</h3>
+        <p>Pesanan <span class="mono">${order.order_code}</span> dibatalkan otomatis karena tidak dibayar dalam 2 jam.</p>
+        <a href="orders.html" class="btn btn-secondary">Lihat Riwayat Pesanan</a>
+        <a href="index.html" class="btn btn-primary" style="margin-left:10px;">Belanja Lagi</a>
+      </div>
+    </div>`;
+    return true;
+  }
+  if (order.status !== 'pending_payment') {
+    content.innerHTML = `<div class="panel reveal in" style="text-align:center;">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--mint)" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10-3-3"/></svg>
+        <h3>Pesanan sudah dibayar</h3>
+        <p>Pesanan <span class="mono">${order.order_code}</span> berstatus: ${statusBadge(order.status)}</p>
+        <a href="orders.html" class="btn btn-primary">Lihat Status Pesanan</a>
+      </div>
+    </div>`;
+    return true;
+  }
+  return false;
+}
+
+function startCountdown(expiresAt) {
+  const el = document.getElementById('timerValue');
+  clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    const diff = new Date(expiresAt) - new Date();
+    if (diff <= 0) {
+      clearInterval(countdownInterval);
+      loadOrder(); // re-fetch to trigger server-side expiry
+      return;
+    }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    if (el) el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, 1000);
+}
+
+function renderPaymentForm(order) {
+  const content = document.getElementById('paymentContent');
+  selectedMethod = order.payment_method || 'qris';
+  content.innerHTML = `
+    <div class="reveal in">
+      <div class="timer-box">
+        <p style="opacity:.85;margin:0;">Selesaikan pembayaran sebelum</p>
+        <div class="timer-value" id="timerValue">02:00:00</div>
+        <p style="opacity:.85;margin:0;font-size:0.85rem;">Kode Pesanan: <span class="mono">${order.order_code}</span></p>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="flex-between" style="margin-bottom:16px;">
+          <h3 style="margin:0;">Total Pembayaran</h3>
+          <span class="product-price" style="font-size:1.3rem;">${formatRupiah(order.total)}</span>
+        </div>
+
+        <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:10px;">Pilih Metode Pembayaran</label>
+        <div class="pay-method-grid" id="paymentMethods">
+          ${Object.entries(METHOD_LABEL).map(([key, label]) => `<button type="button" class="pay-method ${selectedMethod===key?'selected':''}" data-method="${key}">${label}</button>`).join('')}
+        </div>
+
+        <div id="methodDetail" style="margin-top:16px;">${methodDetailHtml(selectedMethod, order)}</div>
+
+        <div class="alert alert-error" id="payError"></div>
+
+        <button class="btn btn-primary btn-block" id="confirmPayBtn" style="margin-top:8px;">Saya Sudah Bayar</button>
+        <p class="helper-text" style="text-align:center;margin-top:12px;">Kamu bisa keluar dari halaman ini — status pesanan tetap bisa dicek di <a href="orders.html" style="color:var(--sky-600);font-weight:700;">Riwayat Pesanan</a>.</p>
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('.pay-method').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.pay-method').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedMethod = btn.dataset.method;
+      document.getElementById('methodDetail').innerHTML = methodDetailHtml(selectedMethod, order);
+    });
+  });
+
+  document.getElementById('confirmPayBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('confirmPayBtn');
+    const errorEl = document.getElementById('payError');
+    errorEl.classList.remove('show');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Mengonfirmasi...';
+    try {
+      await apiCall(`/orders/${order.order_code}/pay`, { method: 'POST', body: { payment_method: selectedMethod } });
+      clearInterval(countdownInterval);
+      toast('Pembayaran berhasil dikonfirmasi!', 'success');
+      setTimeout(() => window.location.href = 'orders.html', 700);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Saya Sudah Bayar';
+    }
+  });
+
+  startCountdown(order.expires_at);
+}
+
+async function loadOrder() {
+  const user = await requireLoginOrRedirect(`payment.html?code=${orderCode}`);
+  if (!user) return;
+  if (!orderCode) { document.getElementById('paymentContent').innerHTML = '<p>Kode pesanan tidak ditemukan.</p>'; return; }
+  try {
+    const data = await apiCall('/orders/' + orderCode);
+    currentOrder = data.order;
+    if (renderExpiredOrDone(currentOrder)) return;
+    renderPaymentForm(currentOrder);
+  } catch (err) {
+    document.getElementById('paymentContent').innerHTML = `<p>Gagal memuat pesanan: ${err.message}</p>`;
+  }
+}
+
+loadOrder();
+</script>
+</body>
+</html>

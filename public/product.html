@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detail Produk — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="section">
+  <div class="container">
+    <div id="productDetail" class="page-loader"><div class="spinner"></div></div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0;">
+  <div class="container">
+    <h2 class="reveal">Mungkin Kamu Suka</h2>
+    <div id="relatedGrid" class="product-grid reveal"></div>
+  </div>
+</section>
+
+<script src="js/main.js"></script>
+<script>
+renderNavbar('catalog');
+
+const params = new URLSearchParams(location.search);
+const productId = params.get('id');
+let currentProduct = null;
+
+function productCardHtml(p) {
+  const img = p.image_url || 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=800';
+  return `
+    <div class="product-card">
+      <a href="product.html?id=${p.id}">
+        <div class="product-thumb"><span class="product-tag">${p.category}</span><img src="${img}" alt="${p.name}"></div>
+      </a>
+      <div class="product-body">
+        <a href="product.html?id=${p.id}"><h3>${p.name}</h3></a>
+        <span class="product-price">${formatRupiah(p.price)}</span>
+      </div>
+    </div>
+  `;
+}
+
+async function loadProduct() {
+  const el = document.getElementById('productDetail');
+  if (!productId) { el.innerHTML = '<p>Produk tidak ditemukan.</p>'; return; }
+  try {
+    const data = await apiCall('/products/' + productId);
+    currentProduct = data.product;
+    const p = currentProduct;
+    const img = p.image_url || 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=900';
+    el.innerHTML = `
+      <div class="grid-2">
+        <div class="reveal in" style="border-radius:var(--radius-lg);overflow:hidden;background:radial-gradient(circle at 60% 30%, var(--sky-100), var(--sky-50));aspect-ratio:1/1;">
+          <img src="${img}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;">
+        </div>
+        <div class="reveal in">
+          <span class="eyebrow">${p.category}</span>
+          <h1 style="font-size:2.1rem;">${p.name}</h1>
+          <p class="product-price" style="font-size:1.5rem;margin-bottom:16px;">${formatRupiah(p.price)}</p>
+          <p>${p.description || 'Tidak ada deskripsi untuk produk ini.'}</p>
+          <p class="product-stock" style="margin-bottom:24px;">${p.stock > 0 ? `Stok tersedia: ${p.stock}` : 'Stok habis'}</p>
+          <div class="qty-control" style="width:fit-content;margin-bottom:24px;">
+            <button id="qtyMinus" type="button">−</button>
+            <span id="qtyValue">1</span>
+            <button id="qtyPlus" type="button">+</button>
+          </div>
+          <div class="flex gap-16">
+            <button id="addToCartBtn" class="btn btn-primary" ${p.stock <= 0 ? 'disabled' : ''}>Tambah ke Keranjang</button>
+            <a href="cart.html" class="btn btn-secondary">Lihat Keranjang</a>
+          </div>
+        </div>
+      </div>
+    `;
+
+    let qty = 1;
+    document.getElementById('qtyMinus').addEventListener('click', () => { qty = Math.max(1, qty - 1); document.getElementById('qtyValue').textContent = qty; });
+    document.getElementById('qtyPlus').addEventListener('click', () => { qty = Math.min(p.stock, qty + 1); document.getElementById('qtyValue').textContent = qty; });
+    document.getElementById('addToCartBtn').addEventListener('click', () => addToCart(p, qty));
+
+    loadRelated(p.category, p.id);
+  } catch (err) {
+    el.innerHTML = `<p>Gagal memuat produk: ${err.message}</p>`;
+  }
+}
+
+async function loadRelated(category, excludeId) {
+  try {
+    const data = await apiCall('/products?category=' + category);
+    const related = data.products.filter(p => p.id !== Number(excludeId)).slice(0, 4);
+    document.getElementById('relatedGrid').innerHTML = related.map(productCardHtml).join('') || '<p>Tidak ada produk terkait.</p>';
+  } catch (e) { /* ignore */ }
+}
+
+loadProduct();
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pesanan Saya — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="section">
+  <div class="container">
+    <h1 class="reveal in">Pesanan Saya</h1>
+    <p class="reveal in">Pantau status pesanan kamu, dari pembayaran sampai barang diterima.</p>
+    <div id="ordersList" class="page-loader" style="margin-top:24px;"><div class="spinner"></div></div>
+  </div>
+</section>
+
+<script src="js/main.js"></script>
+<script>
+renderNavbar('orders');
+
+function orderCardHtml(order) {
+  const canPay = order.status === 'pending_payment';
+  const canReceive = order.status === 'shipped';
+  return `
+    <div class="panel reveal in" style="margin-bottom:18px;">
+      <div class="flex-between" style="flex-wrap:wrap;gap:10px;">
+        <div>
+          <p class="mono" style="font-size:0.82rem;color:var(--ink-500);margin:0;">${order.order_code}</p>
+          <p style="font-size:0.82rem;color:var(--ink-500);margin:2px 0 0;">${formatDate(order.created_at)}</p>
+        </div>
+        ${statusBadge(order.status)}
+      </div>
+      <div class="summary-row total" style="border-top:1px solid var(--sky-50);margin-top:14px;padding-top:14px;">
+        <span style="font-size:0.95rem;font-weight:600;color:var(--ink-700);">Total Belanja</span>
+        <span>${formatRupiah(order.total)}</span>
+      </div>
+      <p style="font-size:0.85rem;color:var(--ink-500);margin-top:-6px;">Dikirim ke: ${order.recipient_name} — ${order.city}</p>
+      <div class="flex gap-12" style="margin-top:12px;flex-wrap:wrap;">
+        ${canPay ? `<a href="payment.html?code=${order.order_code}" class="btn btn-primary btn-sm">Lanjutkan Bayar</a>` : ''}
+        ${canReceive ? `<button class="btn btn-primary btn-sm receive-btn" data-code="${order.order_code}">Barang Diterima</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+async function loadOrders() {
+  const user = await requireLoginOrRedirect('orders.html');
+  if (!user) return;
+  const list = document.getElementById('ordersList');
+  try {
+    const data = await apiCall('/orders');
+    if (data.orders.length === 0) {
+      list.innerHTML = `<div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        <p>Belum ada pesanan.</p>
+        <a href="index.html" class="btn btn-primary">Mulai Belanja</a>
+      </div>`;
+      return;
+    }
+    list.innerHTML = data.orders.map(orderCardHtml).join('');
+    list.querySelectorAll('.receive-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Memproses...';
+        try {
+          await apiCall(`/orders/${btn.dataset.code}/received`, { method: 'POST' });
+          toast('Terima kasih! Pesanan ditandai sudah diterima.', 'success');
+          loadOrders();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Barang Diterima';
+        }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<p>Gagal memuat pesanan: ${err.message}</p>`;
+  }
+}
+
+loadOrders();
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pesanan — Admin OptikCerah</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container flex-between">
+    <div class="brand"><span class="brand-mark" id="brandMark"></span> OptikCerah Admin</div>
+    <div class="flex gap-16">
+      <span id="adminTopbarUser" style="font-weight:600;font-size:0.9rem;color:var(--ink-700);"></span>
+      <button class="btn btn-secondary btn-sm" id="adminLogoutBtn">Keluar</button>
+    </div>
+  </div>
+</nav>
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebarRoot"></aside>
+  <main class="admin-main">
+    <h1 class="reveal in">Semua Pesanan</h1>
+    <p class="reveal in">Kelola status pesanan dari pembayaran hingga diterima pelanggan.</p>
+
+    <div class="filter-bar reveal in">
+      <button class="filter-pill active" data-status="">Semua</button>
+      <button class="filter-pill" data-status="pending_payment">Menunggu Bayar</button>
+      <button class="filter-pill" data-status="paid">Sudah Dibayar</button>
+      <button class="filter-pill" data-status="processing">Diproses</button>
+      <button class="filter-pill" data-status="shipped">Dikirim</button>
+      <button class="filter-pill" data-status="received">Selesai</button>
+      <button class="filter-pill" data-status="expired">Kedaluwarsa</button>
+    </div>
+
+    <div id="ordersTable" class="page-loader"><div class="spinner"></div></div>
+  </main>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+<script>
+document.getElementById('brandMark').innerHTML = brandMarkSvg();
+renderAdminSidebar('orders');
+initAdminTopbar();
+
+let currentStatus = '';
+
+function actionButtons(order) {
+  if (order.status === 'paid') return `<button class="btn btn-primary btn-sm process-btn" data-code="${order.order_code}">Barang Diproses</button>`;
+  if (order.status === 'processing') return `<button class="btn btn-primary btn-sm ship-btn" data-code="${order.order_code}">Barang Dikirim</button>`;
+  if (order.status === 'shipped') return `<span class="helper-text">Menunggu konfirmasi pelanggan</span>`;
+  if (order.status === 'received') return `<span class="helper-text">Selesai ✓</span>`;
+  return '';
+}
+
+async function loadOrders() {
+  await requireAdminOrRedirect();
+  const table = document.getElementById('ordersTable');
+  table.className = 'page-loader';
+  table.innerHTML = '<div class="spinner"></div>';
+  try {
+    const qs = currentStatus ? `?status=${currentStatus}` : '';
+    const data = await apiCall('/admin/orders' + qs);
+    table.className = '';
+    if (data.orders.length === 0) {
+      table.innerHTML = `<div class="empty-state"><p>Tidak ada pesanan pada status ini.</p></div>`;
+      return;
+    }
+    table.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th>Kode</th><th>Pelanggan</th><th>Kota</th><th>Tanggal</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody>
+        ${data.orders.map(o => `<tr>
+          <td class="mono">${o.order_code}</td>
+          <td>${o.recipient_name}</td>
+          <td>${o.city}</td>
+          <td>${formatDate(o.created_at)}</td>
+          <td>${formatRupiah(o.total)}</td>
+          <td>${statusBadge(o.status)}</td>
+          <td>${actionButtons(o)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div></div>`;
+
+    table.querySelectorAll('.process-btn').forEach(btn => btn.addEventListener('click', () => updateStatus(btn, 'processing')));
+    table.querySelectorAll('.ship-btn').forEach(btn => btn.addEventListener('click', () => updateStatus(btn, 'shipped')));
+  } catch (err) {
+    table.innerHTML = `<p>Gagal memuat pesanan: ${err.message}</p>`;
+  }
+}
+
+async function updateStatus(btn, targetStatus) {
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+  try {
+    await apiCall(`/admin/orders/${btn.dataset.code}/${targetStatus}`, { method: 'POST' });
+    toast('Status pesanan diperbarui.', 'success');
+    loadOrders();
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+document.querySelectorAll('.filter-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentStatus = btn.dataset.status;
+    loadOrders();
+  });
+});
+
+loadOrders();
+</script>
+</body>
+</html>

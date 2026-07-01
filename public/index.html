@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OptikCerah — Kacamata & Aksesoris</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="hero">
+  <div class="sky-orb" style="width:340px;height:340px;top:-100px;right:-80px;"></div>
+  <div class="sky-orb orb-ring" style="width:180px;height:180px;bottom:20px;left:-40px;"></div>
+  <div class="container hero-inner">
+    <div>
+      <span class="eyebrow">Koleksi Terbaru 2026</span>
+      <h1>Lihat dunia lebih <span>cerah</span>, dengan gaya yang pas.</h1>
+      <p class="lead">Kacamata, aksesoris, dan pendukung pilihan untuk menemani aktivitasmu — dari kerja, belajar, sampai jalan-jalan di bawah langit cerah.</p>
+      <div class="flex gap-16">
+        <a href="#produk" class="btn btn-primary">Jelajahi Katalog</a>
+        <a href="#kategori" class="btn btn-secondary">Lihat Kategori</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="lens-frame"></div>
+      <img src="https://images.unsplash.com/photo-1577803645773-f96470509666?w=900" alt="Kacamata OptikCerah">
+    </div>
+  </div>
+</section>
+
+<section class="section" id="produk">
+  <div class="container">
+    <div class="reveal" style="margin-bottom:30px;">
+      <h2>Katalog Produk</h2>
+      <p>Cari kacamata, aksesoris, atau perlengkapan pendukung favoritmu.</p>
+    </div>
+
+    <div class="search-box reveal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Cari produk...">
+    </div>
+
+    <div class="filter-bar reveal" id="kategori">
+      <button class="filter-pill active" data-cat="semua">Semua</button>
+      <button class="filter-pill" data-cat="kacamata">Kacamata</button>
+      <button class="filter-pill" data-cat="aksesoris">Aksesoris</button>
+      <button class="filter-pill" data-cat="pendukung">Pendukung</button>
+    </div>
+
+    <div id="productGrid" class="product-grid"></div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container grid-2">
+    <div>
+      <div class="brand" style="color:#fff;margin-bottom:14px;">
+        <span class="brand-mark" id="footerBrandMark"></span>
+        OptikCerah
+      </div>
+      <p style="color:var(--sky-200);opacity:.75;max-width:320px;">Toko kacamata online untuk kebutuhan penglihatan dan gayamu sehari-hari.</p>
+    </div>
+    <div>
+      <h4>Tautan</h4>
+      <ul style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+        <li><a href="index.html">Beranda</a></li>
+        <li><a href="cart.html">Keranjang</a></li>
+        <li><a href="orders.html">Pesanan Saya</a></li>
+        <li><a href="login.html">Masuk / Daftar</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    &copy; 2026 OptikCerah. Proyek tugas kuliah — bukan toko sungguhan.
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+<script>
+document.getElementById('footerBrandMark').innerHTML = brandMarkSvg().replace(/#0284c7/g,'#7dd3fc').replace(/#38bdf8/g,'#e0f2fe');
+renderNavbar('catalog');
+
+let allProducts = [];
+let currentCategory = 'semua';
+let currentSearch = '';
+
+function productCardHtml(p) {
+  const img = p.image_url || 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=800';
+  return `
+    <div class="product-card reveal in">
+      <a href="product.html?id=${p.id}">
+        <div class="product-thumb">
+          <span class="product-tag">${p.category}</span>
+          <img src="${img}" alt="${p.name}" loading="lazy">
+        </div>
+      </a>
+      <div class="product-body">
+        <a href="product.html?id=${p.id}"><h3>${p.name}</h3></a>
+        <span class="product-stock">${p.stock > 0 ? `Stok: ${p.stock}` : 'Stok habis'}</span>
+        <span class="product-price">${formatRupiah(p.price)}</span>
+      </div>
+      <div class="product-actions">
+        <a href="product.html?id=${p.id}" class="btn btn-secondary btn-sm btn-block">Lihat Detail</a>
+      </div>
+    </div>
+  `;
+}
+
+async function loadProducts() {
+  const grid = document.getElementById('productGrid');
+  grid.innerHTML = '<div class="page-loader"><div class="spinner"></div></div>';
+  try {
+    const params = new URLSearchParams();
+    if (currentCategory !== 'semua') params.set('category', currentCategory);
+    if (currentSearch) params.set('search', currentSearch);
+    const data = await apiCall('/products?' + params.toString());
+    allProducts = data.products;
+    if (allProducts.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <p>Produk tidak ditemukan.</p>
+      </div>`;
+      return;
+    }
+    grid.innerHTML = allProducts.map(productCardHtml).join('');
+  } catch (err) {
+    grid.innerHTML = `<p style="grid-column:1/-1;">Gagal memuat produk: ${err.message}</p>`;
+  }
+}
+
+document.querySelectorAll('.filter-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentCategory = btn.dataset.cat;
+    loadProducts();
+  });
+});
+
+let searchTimeout;
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => { currentSearch = e.target.value.trim(); loadProducts(); }, 350);
+});
+
+loadProducts();
+</script>
+</body>
+</html>

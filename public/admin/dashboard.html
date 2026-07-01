@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dasbor Admin — OptikCerah</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container flex-between">
+    <div class="brand"><span class="brand-mark" id="brandMark"></span> OptikCerah Admin</div>
+    <div class="flex gap-16">
+      <span id="adminTopbarUser" style="font-weight:600;font-size:0.9rem;color:var(--ink-700);"></span>
+      <button class="btn btn-secondary btn-sm" id="adminLogoutBtn">Keluar</button>
+    </div>
+  </div>
+</nav>
+
+<div class="admin-shell">
+  <aside class="admin-sidebar" id="adminSidebarRoot"></aside>
+  <main class="admin-main">
+    <h1 class="reveal in">Dasbor</h1>
+    <p class="reveal in">Ringkasan pendapatan dan pesanan yang perlu diproses.</p>
+
+    <div id="statsGrid" class="page-loader"><div class="spinner"></div></div>
+
+    <div class="reveal in" style="margin-top:40px;">
+      <div class="flex-between" style="margin-bottom:16px;">
+        <h2 style="margin:0;">Perlu Dikirim</h2>
+        <a href="orders.html" class="btn btn-secondary btn-sm">Lihat Semua Pesanan</a>
+      </div>
+      <div id="toShipList"></div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+<script>
+document.getElementById('brandMark').innerHTML = brandMarkSvg();
+renderAdminSidebar('dashboard');
+initAdminTopbar();
+
+async function loadStats() {
+  await requireAdminOrRedirect();
+  const grid = document.getElementById('statsGrid');
+  try {
+    const stats = await apiCall('/admin/stats');
+    grid.className = '';
+    grid.innerHTML = `
+      <div class="product-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+        <div class="stat-card reveal in"><p class="stat-label">Total Pendapatan (Diterima)</p><p class="stat-value accent">${formatRupiah(stats.revenue)}</p></div>
+        <div class="stat-card reveal in"><p class="stat-label">Perlu Dikirim</p><p class="stat-value">${stats.pendingToShip}</p></div>
+        <div class="stat-card reveal in"><p class="stat-label">Dalam Perjalanan</p><p class="stat-value">${stats.inTransit}</p></div>
+        <div class="stat-card reveal in"><p class="stat-label">Total Pesanan</p><p class="stat-value">${stats.totalOrders}</p></div>
+      </div>
+    `;
+    initReveal();
+  } catch (err) {
+    grid.innerHTML = `<p>Gagal memuat statistik: ${err.message}</p>`;
+  }
+}
+
+function actionButtons(order) {
+  if (order.status === 'paid') return `<button class="btn btn-primary btn-sm process-btn" data-code="${order.order_code}">Barang Diproses</button>`;
+  if (order.status === 'processing') return `<button class="btn btn-primary btn-sm ship-btn" data-code="${order.order_code}">Barang Dikirim</button>`;
+  return '';
+}
+
+async function loadToShip() {
+  const list = document.getElementById('toShipList');
+  try {
+    const [paidRes, processingRes] = await Promise.all([apiCall('/admin/orders?status=paid'), apiCall('/admin/orders?status=processing')]);
+    const orders = [...paidRes.orders, ...processingRes.orders];
+    if (orders.length === 0) {
+      list.innerHTML = `<div class="empty-state"><p>Tidak ada pesanan yang perlu diproses saat ini.</p></div>`;
+      return;
+    }
+    list.innerHTML = `<div class="panel"><div class="table-wrap"><table>
+      <thead><tr><th>Kode Pesanan</th><th>Penerima</th><th>Kota</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody>
+        ${orders.map(o => `<tr>
+          <td class="mono">${o.order_code}</td>
+          <td>${o.recipient_name}</td>
+          <td>${o.city}</td>
+          <td>${formatRupiah(o.total)}</td>
+          <td>${statusBadge(o.status)}</td>
+          <td>${actionButtons(o)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div></div>`;
+
+    list.querySelectorAll('.process-btn').forEach(btn => btn.addEventListener('click', () => updateOrderStatus(btn, 'processing')));
+    list.querySelectorAll('.ship-btn').forEach(btn => btn.addEventListener('click', () => updateOrderStatus(btn, 'shipped')));
+  } catch (err) {
+    list.innerHTML = `<p>Gagal memuat data: ${err.message}</p>`;
+  }
+}
+
+async function updateOrderStatus(btn, targetStatus) {
+  const endpoint = targetStatus === 'processing' ? 'processing' : 'shipped';
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+  try {
+    await apiCall(`/admin/orders/${btn.dataset.code}/${endpoint}`, { method: 'POST' });
+    toast('Status pesanan diperbarui.', 'success');
+    loadToShip();
+    loadStats();
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+loadStats();
+loadToShip();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keranjang — OptikCerah</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-root"></div>
+
+<section class="section">
+  <div class="container">
+    <h1 class="reveal in">Keranjang Belanja</h1>
+    <div class="grid-2" style="align-items:start;margin-top:30px;">
+      <div class="panel reveal in" id="cartItemsPanel"></div>
+      <div class="panel reveal in">
+        <h3>Ringkasan Belanja</h3>
+        <div id="summaryBody">
+          <div class="summary-row"><span>Subtotal</span><span id="sumSubtotal">Rp0</span></div>
+          <div class="summary-row total"><span>Total</span><span id="sumTotal">Rp0</span></div>
+        </div>
+        <p class="helper-text">Ongkos kirim, kode promo, dan alamat akan diisi pada langkah checkout.</p>
+        <button id="checkoutBtn" class="btn btn-primary btn-block" style="margin-top:16px;">Lanjut ke Checkout</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="js/main.js"></script>
+<script>
+renderNavbar();
+
+function renderCart() {
+  const cart = getCart();
+  const panel = document.getElementById('cartItemsPanel');
+  const checkoutBtn = document.getElementById('checkoutBtn');
+
+  if (cart.length === 0) {
+    panel.innerHTML = `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <h3>Keranjang masih kosong</h3>
+      <p>Yuk mulai lihat-lihat kacamata favoritmu.</p>
+      <a href="index.html" class="btn btn-primary">Jelajahi Katalog</a>
+    </div>`;
+    checkoutBtn.disabled = true;
+    updateSummary(0);
+    return;
+  }
+
+  checkoutBtn.disabled = false;
+  panel.innerHTML = cart.map(item => `
+    <div class="cart-item" data-id="${item.product_id}">
+      <img src="${item.image_url || 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=400'}" alt="${item.name}">
+      <div>
+        <h3 style="font-size:0.98rem;">${item.name}</h3>
+        <span class="product-price">${formatRupiah(item.price)}</span>
+      </div>
+      <div class="qty-control">
+        <button type="button" class="qty-minus">−</button>
+        <span>${item.quantity}</span>
+        <button type="button" class="qty-plus">+</button>
+      </div>
+      <button type="button" class="btn btn-danger btn-sm remove-btn">Hapus</button>
+    </div>
+  `).join('');
+
+  panel.querySelectorAll('.qty-minus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.closest('.cart-item').dataset.id);
+      const item = getCart().find(it => it.product_id === id);
+      updateCartQty(id, item.quantity - 1);
+      renderCart();
+    });
+  });
+  panel.querySelectorAll('.qty-plus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.closest('.cart-item').dataset.id);
+      const item = getCart().find(it => it.product_id === id);
+      updateCartQty(id, item.quantity + 1);
+      renderCart();
+    });
+  });
+  panel.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.closest('.cart-item').dataset.id);
+      removeFromCart(id);
+      toast('Produk dihapus dari keranjang');
+      renderCart();
+    });
+  });
+
+  const subtotal = cart.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  updateSummary(subtotal);
+}
+
+function updateSummary(subtotal) {
+  document.getElementById('sumSubtotal').textContent = formatRupiah(subtotal);
+  document.getElementById('sumTotal').textContent = formatRupiah(subtotal);
+}
+
+document.getElementById('checkoutBtn').addEventListener('click', async () => {
+  const user = await requireLoginOrRedirect('checkout.html');
+  if (user) window.location.href = 'checkout.html';
+});
+
+renderCart();
+</script>
+</body>
+</html>
